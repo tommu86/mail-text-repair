@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ISO-2022-JP 文字化け修復ツール</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --border: #cbd5e1;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 800px;
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    p.desc {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+
+    .panel {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 160px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      border-color: var(--primary);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    button {
+      background-color: var(--primary);
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: var(--primary-hover);
+    }
+
+    button.secondary {
+      background-color: #e2e8f0;
+      color: #334155;
+    }
+
+    button.secondary:hover {
+      background-color: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>ISO-2022-JP 文字化け修復ツール</h1>
+  <p class="desc">
+    メール転送やセキュリティゲートウェイ通過時に「ESC制御文字」が脱落し、<br>
+    <code>$B...</code> や <code>(B</code> が露出して化けたJISテキストを復元します。
+  </p>
+
+  <div class="panel">
+    <label for="input">文字化けテキスト（入力）:</label>
+    <textarea id="input" placeholder="例: $BLn:j9)6H3t<02q<R(B&#10;$BBmEDMM(B"></textarea>
+  </div>
+
+  <div class="actions">
+    <button id="convertBtn">修復実行</button>
+    <button class="secondary" id="clearBtn">クリア</button>
+  </div>
+
+  <div class="panel">
+    <label for="output">修復結果:</label>
+    <textarea id="output" readonly placeholder="変換後のテキストがここに表示されます"></textarea>
+  </div>
+</div>
+
+<script>
+  function repairIso2022Jp(text) {
+    if (!text) return "";
+
+    // 抜け落ちたエスケープシーケンス(0x1B)を補正する
+    // $B (JIS X 0208-1983開始) / $ ( (JIS X 0208/0212開始) / (B (ASCII復帰) / (J (JISローマ字復帰)
+    let fixed = text
+      .replace(/(?<!\x1b)\$B/g, '\x1b$B')
+      .replace(/(?<!\x1b)\$\(@/g, '\x1b$(@')
+      .replace(/(?<!\x1b)\$\(B/g, '\x1b$(B')
+      .replace(/(?<!\x1b)\(B/g, '\x1b(B')
+      .replace(/(?<!\x1b)\(J/g, '\x1b(J');
+
+    // 文字列をバイト列にマッピング
+    const bytes = new Uint8Array(fixed.length);
+    for (let i = 0; i < fixed.length; i++) {
+      bytes[i] = fixed.charCodeAt(i) & 0xff;
+    }
+
+    // ブラウザ標準のTextDecoderを用いてISO-2022-JPとして復号
+    try {
+      const decoder = new TextDecoder('iso-2022-jp', { fatal: false });
+      return decoder.decode(bytes);
+    } catch (e) {
+      console.error(e);
+      return "デコードエラーが発生しました。入力データを確認してください。";
+    }
+  }
+
+  const inputEl = document.getElementById('input');
+  const outputEl = document.getElementById('output');
+  const convertBtn = document.getElementById('convertBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  convertBtn.addEventListener('click', () => {
+    outputEl.value = repairIso2022Jp(inputEl.value);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    outputEl.value = '';
+  });
+
+  // 入力時のリアルタイム反映（入力があれば即変換）
+  inputEl.addEventListener('input', () => {
+    outputEl.value = repairIso2022Jp(inputEl.value);
+  });
+</script>
+
+</body>
+</html>
